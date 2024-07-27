@@ -2,7 +2,7 @@
 
 2, ensure you have "node.js" installed on your computer can get from the node.js website
 
-3, in command prompt first type npm install helmet cors express body-parser to retrieve the packages neccesary (make sure to run that command in the folder you want to run your local server)
+3, in command prompt first type "npm install helmet cors express body-parser" to retrieve the packages neccesary (make sure to run that command in the folder you want to run your local server)
 
 4, in the same command shell, type "node server.js" (server.js should be in the same folder as the packages retrieved earlier) 
    if everything is working so far, the command should print "listening on port 30001, or whatever port you choose in the server.js)
