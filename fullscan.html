@@ -277,7 +277,7 @@
                 .on("mouseout", () => {
                     d3.select("#tooltip").style("opacity", 0);
                 })
-                .call(drag(simulation));
+                .call(drag(simulation)); // Add drag behavior
 
             const labels = nodeGroup
                 .selectAll("text")
@@ -314,12 +314,21 @@
             });
 
             function drag(simulation) {
-                return (event, d) => {
-                    if (!d) return;
-                    d.fx = event.x;
-                    d.fy = event.y;
-                    simulation.alpha(0.3).restart();
-                };
+                return d3.drag()
+                    .on("start", (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    })
+                    .on("drag", (event, d) => {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    })
+                    .on("end", (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    });
             }
 
             // Apply the initial transform to start zoomed out
