@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Scan</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            min-height: 5000vh; /* Ensures there is always enough space to scroll down */
+        }
+        .container {
+            width: 80%;
+            margin: auto;
+            overflow: hidden;
+        }
+        header {
+            background: #333;
+            color: #fff;
+            padding-top: 30px;
+            min-height: 70px;
+            border-bottom: #ddd 3px solid;
+            text-align: center;
+        }
+        header h1 {
+            margin: 0;
+        }
+        .server-info-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .server-info {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .server-info h2 {
+            margin-top: 0;
+        }
+        #network-visualization-container {
+            margin-top: 20px;
+            position: relative;
+            width: 1500px;
+            height: 3000px;
+            overflow: hidden; /* Ensure nothing overflows the container */
+            border: 2px solid #000; /* Border around the container */
+        }
+        #network-visualization {
+            width: 100%;
+            height: 100%;
+        }
+        .zoomable {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Full Scan Server Data</h1>
+        </div>
+    </header>
+    <div class="container">
+        <div id="server-data" class="server-info-container"></div>
+        <div id="network-visualization-container">
+            <svg id="network-visualization" class="zoomable"></svg>
+        </div>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        async function fetchServerData() {
+            try {
+                const response = await fetch('http://localhost:30001/server-data');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                displayServerData(data);
+                createNetworkVisualization(data);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('server-data').innerHTML = `<p>Error fetching data</p>`;
+            }
+        }
+
+        function displayServerData(data) {
+            const container = document.getElementById('server-data');
+            container.innerHTML = '';
+            data.nodes.forEach(server => {
+                const serverDiv = document.createElement('div');
+                serverDiv.classList.add('server-info');
+                serverDiv.innerHTML = `
+                    <h2>Server: ${server.server}</h2>
+                    <p>Security Level: ${server.securityLevel}</p>
+                    <p>Hacking Difficulty: ${server.hackingLevel}</p>
+                    <p>Ports Required for Root Access: ${server.portsRequired}</p>
+                    <p>Root Access: ${server.rootAccessMsg}</p>
+                    <p>RAM: Used-${server.ramUsed}GB / Max-${server.maxRam}GB</p>
+                    <p>CPU Cores: ${server.cpuCores}</p>
+                    <p>Money: $${server.money}</p>
+                `;
+                container.appendChild(serverDiv);
+            });
+        }
+
+        function createNetworkVisualization(data) {
+            const svg = d3.select("#network-visualization");
+            const container = document.getElementById('network-visualization-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            if (!data.nodes || !data.links) {
+                console.error('Data does not have nodes or links');
+                return;
+            }
+
+            const viewBoxWidth = 1000;
+            const viewBoxHeight = 1000;
+            const circleRadius = 125; // Adjust circle radius
+            const distance = circleRadius * 5; // Increase distance between nodes
+
+            svg
+                .attr("width", width)
+                .attr("height", height)
+                .attr("viewBox", `0 0 ${viewBoxWidth} ${viewBoxHeight}`)
+                .attr("preserveAspectRatio", "xMidYMid meet");
+
+            const zoom = d3.zoom()
+                .scaleExtent([0.01, 50]) // Allow more extensive zooming in and out
+                .on("zoom", (event) => {
+                    svg.select("g").attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+            const initialTransform = d3.zoomIdentity
+                .translate(viewBoxWidth / 2, 0)
+                .scale(0.05) // Start zoomed way out
+                .translate(-viewBoxWidth / 2, 0);
+
+            const g = svg.append("g")
+                .attr("transform", initialTransform);
+
+            // Initialize the force simulation with updated parameters
+            const simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.links).id(d => d.server).distance(distance))
+                .force("charge", d3.forceManyBody().strength(-8000)) // Increase repulsion strength
+                .force("center", d3.forceCenter(viewBoxWidth / 2, viewBoxHeight / 2))
+                .force("collide", d3.forceCollide(circleRadius + 1)); // Increase collision distance
+
+            const link = g.append("g")
+                .attr("fill", "none")
+                .attr("stroke", "#999")
+                .attr("stroke-opacity", 0.6)
+                .attr("stroke-width", 10) // Reduce stroke-width
+                .selectAll("line")
+                .data(data.links)
+                .join("line");
+
+            const nodeGroup = g.append("g");
+
+            const node = nodeGroup
+                .selectAll("circle")
+                .data(data.nodes)
+                .join("circle")
+                .attr("r", circleRadius) // Fixed circle radius
+                .attr("fill", d => {
+                    if (d.server === "home" || d.server === "home-0" || d.server === "Pit") {
+                        return "#1f77b4"; // Blue
+                    } else if (d.rootAccessMsg === "Root access") {
+                        return "green"; // Green for root access
+                    } else {
+                        return "grey"; // Default grey
+                    }
+                })
+                .call(drag(simulation));
+
+            const labels = nodeGroup
+                .selectAll("text")
+                .data(data.nodes)
+                .join("text")
+                .attr("text-anchor", "middle")
+                .text(d => d.server)
+                .attr("font-size", "25px")
+                .attr("font-weight", "bold")
+                .attr("fill", "#fff");
+
+            labels.each(function(d) {
+                const bbox = this.getBBox();
+                d.radius = circleRadius;
+            });
+
+            node.append("title")
+                .text(d => d.server);
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+
+                labels
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y);
+            });
+
+            function drag(simulation) {
+                return (event, d) => {
+                    if (!d) return;
+                    d.fx = event.x;
+                    d.fy = event.y;
+                    simulation.alpha(0.3).restart();
+                };
+            }
+
+            // Apply the initial transform to start zoomed out
+            svg.call(zoom.transform, initialTransform);
+        }
+
+        fetchServerData();
+    </script>
+</body>
+</html>
